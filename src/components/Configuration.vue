@@ -14,6 +14,7 @@ import {
   buildPresetService,
   loadPresetService
 } from '../services/presetService.ts';
+import { getAddonCollection } from '../api/stremioApi.ts';
 
 const { t } = useI18n();
 
@@ -28,6 +29,7 @@ let options = ref([]);
 let maxSize = ref('');
 let isSyncButtonEnabled = ref(false);
 let isLoadingPreset = ref(false);
+let isLoadingCurrentUserAddons = ref(false);
 let isSyncAddons = ref(false);
 let language = ref('en');
 let preset = ref('standard');
@@ -89,6 +91,46 @@ async function loadUserAddons() {
   } finally {
     isSyncButtonEnabled.value = true;
     isLoadingPreset.value = false;
+  }
+}
+
+async function loadCurrentUserAddons() {
+  const { track } = useAnalytics();
+  const key = props.stremioAuthKey;
+
+  if (!key) {
+    console.error('No auth key provided');
+    return;
+  }
+
+  isLoadingCurrentUserAddons.value = true;
+  isSyncButtonEnabled.value = false;
+  console.log('Loading current user addons...');
+
+  try {
+    const data = await getAddonCollection(key);
+    track('current_user_addons_click', {
+      title: 'Load current user addons',
+      vars: {
+        language: language.value,
+        preset: preset.value,
+        debrid: debridService.value || ''
+      }
+    });
+
+    if(!data?.result?.addons){
+      console.error('No addons found in current user addons');
+      return;
+    }
+
+    addons.value = data.result.addons;
+    addNotification(t('current_user_addons_loaded'), 'success');
+  } catch (error) {
+    console.error('Error fetching current user addons', error);
+    addNotification(t('current_user_addons_failed'), 'error');
+  } finally {
+    isSyncButtonEnabled.value = true;
+    isLoadingCurrentUserAddons.value = false;
   }
 }
 
@@ -542,6 +584,23 @@ function updateDebridApiUrl() {
           ></span>
           {{
             isLoadingPreset ? $t('loading_addons') : $t('load_addons_preset')
+          }}
+        </button>
+        <button
+          class="btn btn-primary ms-2"
+          @click="loadCurrentUserAddons"
+          :disabled="
+            !props.stremioAuthKey ||
+            (debridService ? !isDebridApiKeyValid : false) ||
+            isLoadingCurrentUserAddons
+          "
+        >
+          <span
+            v-if="isLoadingCurrentUserAddons"
+            class="loading loading-spinner loading-sm"
+          ></span>
+          {{
+            isLoadingCurrentUserAddons ? $t('loading_current_user_addons') : $t('load_current_user_addons')
           }}
         </button>
       </fieldset>
